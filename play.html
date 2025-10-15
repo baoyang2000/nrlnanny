@@ -47,6 +47,10 @@
 
     <script>
         const content = document.getElementById('content');
+        
+        // 全局变量来记录当前排序方式
+        let currentSortOrder = 'asc'; // 'asc' 正序, 'desc' 倒序
+        let autoPlayNext = true; // 是否自动播放下一个音频
 
         // 显示目录列表
         function showDirs() {
@@ -73,15 +77,27 @@
             fetch(`/dir/${dirName}`)
                 .then(res => res.json())
                 .then(files => {
-                    // 按文件创建时间正序排列（从早到晚）
-                    const sortedFiles = files.sort((a, b) => {
-                        const timeA = new Date(a.timestamp).getTime();
-                        const timeB = new Date(b.timestamp).getTime();
-                        return timeA - timeB; // 正序排列
-                    });
+                    // 根据当前排序方式排序文件
+                    const sortedFiles = sortFilesByTimestamp(files, currentSortOrder);
+
                     content.innerHTML = `
                         <a href="#" onclick="showDirs(); return false;" class="back-btn">← 返回目录</a>
                         <h2>目录: ${dirName}</h2>
+                        <div class="controls">
+                            <div class="sort-controls">
+                                <label>排序方式: </label>
+                                <select onchange="changeSortOrder(this.value, '${dirName}')">
+                                    <option value="asc" ${currentSortOrder === 'asc' ? 'selected' : ''}>时间正序</option>
+                                    <option value="desc" ${currentSortOrder === 'desc' ? 'selected' : ''}>时间倒序</option>
+                                </select>
+                            </div>
+                            <div class="autoplay-controls">
+                                <label>
+                                    <input type="checkbox" id="autoplayToggle" ${autoPlayNext ? 'checked' : ''} onchange="toggleAutoPlay(this.checked)">
+                                    自动播放下一个
+                                </label>
+                            </div>
+                        </div>
                         <ul>
                             ${sortedFiles.map(f => `
                                 <li>
@@ -104,6 +120,27 @@
                 });
         }
 
+        // 根据时间戳排序文件
+        function sortFilesByTimestamp(files, order) {
+            return files.sort((a, b) => {
+                const timeA = new Date(a.timestamp).getTime();
+                const timeB = new Date(b.timestamp).getTime();
+                return order === 'asc' ? timeA - timeB : timeB - timeA;
+            });
+        }
+
+        // 切换排序方式
+        function changeSortOrder(order, dirName) {
+            currentSortOrder = order;
+            // 重新显示文件（使用缓存的数据，避免重新请求）
+            showFiles(dirName);
+        }
+
+        // 切换自动播放设置
+        function toggleAutoPlay(enabled) {
+            autoPlayNext = enabled;
+        }
+
         // 设置音频自动播放下一个功能
         function setupAudioAutoPlay() {
             const audioElements = content.querySelectorAll('audio');
@@ -118,9 +155,12 @@
                     pauseOtherAudios(audio);
                 });
         
-                // 添加播放结束事件监听
+                // 只有当自动播放开启时，才添加播放结束事件监听
+                
                 audio.addEventListener('ended', function() {
-                    playNextAudio(index);
+                    if (autoPlayNext) {
+                        playNextAudio(index);
+                    }
                 });
             });
         }
