@@ -73,11 +73,17 @@
             fetch(`/dir/${dirName}`)
                 .then(res => res.json())
                 .then(files => {
+                    // 按文件创建时间正序排列（从早到晚）
+                    const sortedFiles = files.sort((a, b) => {
+                        const timeA = new Date(a.timestamp).getTime();
+                        const timeB = new Date(b.timestamp).getTime();
+                        return timeA - timeB; // 正序排列
+                    });
                     content.innerHTML = `
                         <a href="#" onclick="showDirs(); return false;" class="back-btn">← 返回目录</a>
                         <h2>目录: ${dirName}</h2>
                         <ul>
-                            ${files.map(f => `
+                            ${sortedFiles.map(f => `
                                 <li>
                                     <div class="timestamp">${f.timestamp}</div>
                                     <div class="filename">${f.name}</div>
@@ -89,11 +95,67 @@
                             `).join('')}
                         </ul>
                     `;
+                    // 为所有音频元素添加播放结束事件监听
+                    setupAudioAutoPlay();
                 })
                 .catch(err => {
                     content.innerHTML = `<p>加载文件失败: ${err.message}</p>`;
                     console.error(err);
                 });
+        }
+
+        // 设置音频自动播放下一个功能
+        function setupAudioAutoPlay() {
+            const audioElements = content.querySelectorAll('audio');
+    
+            audioElements.forEach((audio, index) => {
+                // 清除之前可能存在的监听器
+                audio.onplay = null;                
+                audio.onended = null;
+
+                // 添加播放事件监听 - 当播放一个音频时暂停其他所有音频
+                audio.addEventListener('play', function() {
+                    pauseOtherAudios(audio);
+                });
+        
+                // 添加播放结束事件监听
+                audio.addEventListener('ended', function() {
+                    playNextAudio(index);
+                });
+            });
+        }
+
+        // 暂停除当前音频外的所有其他音频
+        function pauseOtherAudios(currentAudio) {
+            const audioElements = content.querySelectorAll('audio');
+    
+            audioElements.forEach(audio => {
+                if (audio !== currentAudio && !audio.paused) {
+                    audio.pause();
+                   audio.currentTime = 0; // 重置播放位置
+                }
+            });
+        }
+
+        // 播放下一个音频
+        function playNextAudio(currentIndex) {
+            const audioElements = content.querySelectorAll('audio');
+            const nextIndex = currentIndex + 1;
+    
+            // 如果存在下一个音频，则播放
+            if (nextIndex < audioElements.length) {
+                const nextAudio = audioElements[nextIndex];
+        
+                // 暂停所有其他音频
+                pauseOtherAudios(nextAudio);
+        
+                // 播放下一个音频
+                nextAudio.play().catch(err => {
+                    console.error('自动播放下一个音频失败:', err);
+                });
+            } else {
+                console.log('已经是最后一个音频，播放结束');
+            }
         }
 
         // 初始加载目录列表
