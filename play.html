@@ -37,6 +37,14 @@
             font-size: 0.9em;
         }
         .back-btn:hover { background: #005a87; }
+        #mySelect {
+            font-size: 18px;
+        }
+        @media (max-width: 600px) {
+            #mySelect {
+                font-size: 18px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -86,7 +94,7 @@
                         <div class="controls">
                             <div class="sort-controls">
                                 <label>排序方式: </label>
-                                <select onchange="changeSortOrder(this.value, '${dirName}')">
+                                <select id="mySelect" onchange="changeSortOrder(this.value, '${dirName}')">
                                     <option value="asc" ${currentSortOrder === 'asc' ? 'selected' : ''}>时间正序</option>
                                     <option value="desc" ${currentSortOrder === 'desc' ? 'selected' : ''}>时间倒序</option>
                                 </select>
