@@ -52,6 +52,10 @@
             /* 不需要设置高度，内容会自动撑开 */
         }
 
+        .bottom-spacer {
+            /* 高度会在JavaScript中动态设置 */
+        }
+
         .floating-player {
             position: fixed;
             bottom: 0;
@@ -225,6 +229,8 @@
                                         <div class="filename">${f.name}</div>
                                     </div>
                                 `).join('')}
+                                <!-- 添加底部空白元素，确保最后几个音频不会被遮挡 -->
+                                <div class="bottom-spacer"></div>
                             </div>
                         </div>
                     `;
@@ -237,6 +243,9 @@
                     
                     // 设置全局音频播放器事件监听
                     setupGlobalAudioPlayer();
+                    
+                    // 更新底部空白元素的高度
+                    updateBottomSpacer();
                 })
                 .catch(err => {
                     content.innerHTML = `<p>加载文件失败: ${err.message}</p>`;
@@ -268,6 +277,8 @@
                                     </audio>
                                 </div>
                             </div>
+                            <div class="player-bottom-row" height=50px>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -277,6 +288,18 @@
                 
                 // 添加iOS特定的样式调整
                 adjustForIOS();
+            }
+        }
+
+        // 更新底部空白元素的高度
+        function updateBottomSpacer() {
+            const bottomSpacer = document.querySelector('.bottom-spacer');
+            const floatingPlayer = document.getElementById('floatingAudioPlayer');
+            
+            if (bottomSpacer && floatingPlayer) {
+                // 设置底部空白元素的高度等于播放器的高度
+                const playerHeight = floatingPlayer.offsetHeight;
+                bottomSpacer.style.height = `${playerHeight + 100}px`; // 额外添加20px的边距
             }
         }
 
@@ -441,22 +464,28 @@
             if (playingElement && fileListContainer) {
                 // 获取悬浮播放器的高度
                 const floatingPlayer = document.getElementById('floatingAudioPlayer');
-                const playerHeight = floatingPlayer ? floatingPlayer.offsetHeight : 140; // 增加默认高度，因为iOS需要更多空间
+                const playerHeight = floatingPlayer ? floatingPlayer.offsetHeight : 140;
                 
-                // 计算元素在容器中的位置
+                // 获取容器信息
+                const containerHeight = fileListContainer.clientHeight;
+                const containerScrollTop = fileListContainer.scrollTop;
+                
+                // 获取元素信息
                 const elementOffsetTop = playingElement.offsetTop;
                 const elementHeight = playingElement.offsetHeight;
-                const containerHeight = fileListContainer.clientHeight;
                 
-                // 计算目标滚动位置，确保元素完全可见且不被底部播放器遮挡
-                // 我们希望元素的底部不超过 (容器高度 - 播放器高度)
-                const desiredBottomPosition = elementOffsetTop + elementHeight;
-                const maxVisibleBottom = fileListContainer.scrollTop + containerHeight - playerHeight;
+                // 计算元素在容器视口中的位置
+                const elementTopRelative = elementOffsetTop - containerScrollTop;
+                const elementBottomRelative = elementTopRelative + elementHeight;
+                
+                // 计算可见区域的底部（减去播放器高度）
+                const visibleAreaBottom = containerHeight - playerHeight;
                 
                 // 如果元素底部超出了可见区域（考虑播放器），则滚动
-                if (desiredBottomPosition > maxVisibleBottom) {
+                if (elementBottomRelative > visibleAreaBottom) {
                     // 计算需要滚动的距离，使元素的底部正好在播放器上方
-                    const targetScrollTop = desiredBottomPosition - (containerHeight - playerHeight);
+                    const scrollOffset = elementBottomRelative - visibleAreaBottom;
+                    const targetScrollTop = containerScrollTop + scrollOffset;
                     
                     // 确保滚动位置不会超出范围
                     const maxScrollTop = fileListContainer.scrollHeight - containerHeight;
@@ -469,7 +498,7 @@
                     });
                 } 
                 // 如果元素顶部在可见区域之上，则滚动到元素顶部
-                else if (elementOffsetTop < fileListContainer.scrollTop) {
+                else if (elementTopRelative < 0) {
                     fileListContainer.scrollTo({
                         top: elementOffsetTop,
                         behavior: 'smooth'
