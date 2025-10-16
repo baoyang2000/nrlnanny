@@ -45,6 +45,87 @@
                 font-size: 18px;
             }
         }
+
+        .file-list-container {
+            height: calc(100vh - 200px); /* 根据您的布局调整高度 */
+            overflow-y: auto;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+
+        .file-list {
+            /* 不需要设置高度，内容会自动撑开 */
+        }
+
+        .floating-player {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            padding: 15px;
+            border-top: 1px solid #ddd;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+
+        .player-content {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .player-top-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .now-playing {
+            font-weight: bold;
+            flex: 1;
+        }
+
+        .player-controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        .control-btn {
+            padding: 8px 15px;
+            background: #f0f0f0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .control-btn:hover {
+            background: #e0e0e0;
+        }
+
+        .player-bottom-row {
+            width: 100%;
+        }
+
+        #globalAudioPlayer {
+            width: 100%;
+        }
+
+        .file-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+        }
+
+        .file-item:hover {
+            background-color: #f5f5f5;
+        }
+
+        .file-item.playing {
+            background-color: #e6f7ff;
+            border-left: 3px solid #1890ff;
+        }
     </style>
 </head>
 <body>
@@ -55,10 +136,6 @@
 
     <script>
         const content = document.getElementById('content');
-        
-        // 全局变量来记录当前排序方式
-        let currentSortOrder = 'asc'; // 'asc' 正序, 'desc' 倒序
-        let autoPlayNext = true; // 是否自动播放下一个音频
 
         // 显示目录列表
         function showDirs() {
@@ -80,23 +157,35 @@
                 });
         }
 
+        // 全局变量来记录当前排序方式
+        let currentSortOrder = 'asc'; // 'asc' 正序, 'desc' 倒序
+        let autoPlayNext = true; // 是否自动播放下一个音频
+        let currentFiles = []; // 当前目录下的文件列表
+        let currentDirName = ''; // 当前目录名
+        let currentPlayingIndex = -1; // 当前播放的音频索引
+
         // 显示某目录下的文件
         function showFiles(dirName) {
+            currentDirName = dirName;
+            
             fetch(`/dir/${dirName}`)
                 .then(res => res.json())
                 .then(files => {
+                    // 保存文件列表
+                    currentFiles = files;
+                    
                     // 根据当前排序方式排序文件
                     const sortedFiles = sortFilesByTimestamp(files, currentSortOrder);
-
+                    
                     content.innerHTML = `
                         <a href="#" onclick="showDirs(); return false;" class="back-btn">← 返回目录</a>
                         <h2>目录: ${dirName}</h2>
                         <div class="controls">
                             <div class="sort-controls">
                                 <label>排序方式: </label>
-                                <select id="mySelect" onchange="changeSortOrder(this.value, '${dirName}')">
-                                    <option value="asc" ${currentSortOrder === 'asc' ? 'selected' : ''}>时间正序</option>
-                                    <option value="desc" ${currentSortOrder === 'desc' ? 'selected' : ''}>时间倒序</option>
+                                <select onchange="changeSortOrder(this.value, '${dirName}')">
+                                    <option value="asc" ${currentSortOrder === 'asc' ? 'selected' : ''}>时间正序 (从早到晚)</option>
+                                    <option value="desc" ${currentSortOrder === 'desc' ? 'selected' : ''}>时间倒序 (从晚到早)</option>
                                 </select>
                             </div>
                             <div class="autoplay-controls">
@@ -106,26 +195,75 @@
                                 </label>
                             </div>
                         </div>
-                        <ul>
-                            ${sortedFiles.map(f => `
-                                <li>
-                                    <div class="timestamp">${f.timestamp}</div>
-                                    <div class="filename">${f.name}</div>
-                                    <audio controls preload="none" playsinline>
-                                        <source src="${f.url}" type="audio/wav">
-                                        您的浏览器不支持 audio 标签。
-                                    </audio>
-                                </li>
-                            `).join('')}
-                        </ul>
+                        <div class="file-list-container">
+                            <div class="file-list">
+                                ${sortedFiles.map((f, index) => `
+                                    <div class="file-item ${index === currentPlayingIndex ? 'playing' : ''}" id="file-item-${index}" onclick="playFile(${index})">
+                                        <div class="timestamp">${f.timestamp}</div>
+                                        <div class="filename">${f.name}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
                     `;
-                    // 为所有音频元素添加播放结束事件监听
-                    setupAudioAutoPlay();
+                    
+                    // 确保悬浮播放器存在
+                    ensureFloatingPlayer();
+                    
+                    // 更新悬浮播放器状态
+                    updateFloatingPlayer();
+                    
+                    // 设置全局音频播放器事件监听
+                    setupGlobalAudioPlayer();
                 })
                 .catch(err => {
                     content.innerHTML = `<p>加载文件失败: ${err.message}</p>`;
                     console.error(err);
                 });
+        }
+
+        // 确保悬浮播放器存在
+        function ensureFloatingPlayer() {
+            // 检查悬浮播放器是否已存在
+            let floatingPlayer = document.getElementById('floatingAudioPlayer');
+            
+            if (!floatingPlayer) {
+                // 创建悬浮播放器
+                const playerHTML = `
+                    <div id="floatingAudioPlayer" class="floating-player">
+                        <div class="player-content">
+                            <div class="player-top-row">
+                                <div class="now-playing">选择文件开始播放</div>
+                                <div class="player-controls">
+                                    <button onclick="playPreviousFile()" class="control-btn">上一首</button>
+                                    <button onclick="playNextFile()" class="control-btn">下一首</button>
+                                </div>
+                            </div>
+                            <div class="player-bottom-row">
+                                <audio id="globalAudioPlayer" controls preload="none" playsinline>
+                                    您的浏览器不支持 audio 标签。
+                                </audio>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // 将悬浮播放器添加到页面底部
+                document.body.insertAdjacentHTML('beforeend', playerHTML);
+            }
+        }
+
+        // 更新悬浮播放器状态
+        function updateFloatingPlayer() {
+            const nowPlayingElement = document.querySelector('.now-playing');
+            
+            if (currentPlayingIndex >= 0) {
+                const sortedFiles = sortFilesByTimestamp(currentFiles, currentSortOrder);
+                const file = sortedFiles[currentPlayingIndex];
+                nowPlayingElement.textContent = `正在播放: ${file.name}`;
+            } else {
+                nowPlayingElement.textContent = '选择文件开始播放';
+            }
         }
 
         // 根据时间戳排序文件
@@ -140,7 +278,7 @@
         // 切换排序方式
         function changeSortOrder(order, dirName) {
             currentSortOrder = order;
-            // 重新显示文件（使用缓存的数据，避免重新请求）
+            // 重新显示文件
             showFiles(dirName);
         }
 
@@ -149,60 +287,145 @@
             autoPlayNext = enabled;
         }
 
-        // 设置音频自动播放下一个功能
-        function setupAudioAutoPlay() {
-            const audioElements = content.querySelectorAll('audio');
-    
-            audioElements.forEach((audio, index) => {
-                // 清除之前可能存在的监听器
-                audio.onplay = null;                
-                audio.onended = null;
-
-                // 添加播放事件监听 - 当播放一个音频时暂停其他所有音频
-                audio.addEventListener('play', function() {
-                    pauseOtherAudios(audio);
-                });
-        
-                // 只有当自动播放开启时，才添加播放结束事件监听
-                
-                audio.addEventListener('ended', function() {
-                    if (autoPlayNext) {
-                        playNextAudio(index);
-                    }
-                });
-            });
-        }
-
-        // 暂停除当前音频外的所有其他音频
-        function pauseOtherAudios(currentAudio) {
-            const audioElements = content.querySelectorAll('audio');
-    
-            audioElements.forEach(audio => {
-                if (audio !== currentAudio && !audio.paused) {
-                    audio.pause();
-                   audio.currentTime = 0; // 重置播放位置
+        // 设置全局音频播放器
+        function setupGlobalAudioPlayer() {
+            const audioPlayer = document.getElementById('globalAudioPlayer');
+            
+            if (!audioPlayer) return;
+            
+            // 清除之前的事件监听器
+            audioPlayer.onended = null;
+            
+            // 添加播放结束事件监听
+            audioPlayer.addEventListener('ended', function() {
+                if (autoPlayNext) {
+                    playNextFile();
                 }
             });
         }
 
-        // 播放下一个音频
-        function playNextAudio(currentIndex) {
-            const audioElements = content.querySelectorAll('audio');
-            const nextIndex = currentIndex + 1;
-    
-            // 如果存在下一个音频，则播放
-            if (nextIndex < audioElements.length) {
-                const nextAudio = audioElements[nextIndex];
-        
-                // 暂停所有其他音频
-                pauseOtherAudios(nextAudio);
-        
-                // 播放下一个音频
-                nextAudio.play().catch(err => {
-                    console.error('自动播放下一个音频失败:', err);
-                });
+        // 播放指定索引的文件
+        function playFile(index) {
+            // 获取排序后的文件列表
+            const sortedFiles = sortFilesByTimestamp(currentFiles, currentSortOrder);
+            
+            if (index < 0 || index >= sortedFiles.length) return;
+            
+            const file = sortedFiles[index];
+            const audioPlayer = document.getElementById('globalAudioPlayer');
+            
+            if (!audioPlayer) return;
+            
+            // 更新当前播放索引
+            currentPlayingIndex = index;
+            
+            // 设置音频源
+            audioPlayer.src = file.url;
+            
+            // 更新悬浮播放器显示
+            updateFloatingPlayer();
+            
+            // 更新文件列表中的高亮状态
+            updateFileListHighlight();
+            
+            // 滚动到正在播放的文件项
+            scrollToPlayingFile();
+            
+            // 播放音频
+            audioPlayer.play().catch(err => {
+                console.error('播放音频失败:', err);
+            });
+        }
+
+        // 播放上一个文件
+        function playPreviousFile() {
+            // 获取排序后的文件列表
+            const sortedFiles = sortFilesByTimestamp(currentFiles, currentSortOrder);
+            
+            const prevIndex = currentPlayingIndex - 1;
+            
+            if (prevIndex >= 0) {
+                playFile(prevIndex);
             } else {
-                console.log('已经是最后一个音频，播放结束');
+                console.log('已经是第一个文件');
+            }
+        }
+
+        // 播放下一个文件
+        function playNextFile() {
+            // 获取排序后的文件列表
+            const sortedFiles = sortFilesByTimestamp(currentFiles, currentSortOrder);
+            
+            const nextIndex = currentPlayingIndex + 1;
+            
+            if (nextIndex < sortedFiles.length) {
+                playFile(nextIndex);
+            } else {
+                // 已经是最后一个文件
+                console.log('已经是最后一个文件，播放结束');
+                currentPlayingIndex = -1;
+                updateFileListHighlight();
+                updateFloatingPlayer();
+            }
+        }
+
+        // 更新文件列表中的高亮状态
+        function updateFileListHighlight() {
+            const fileItems = document.querySelectorAll('.file-item');
+            
+            fileItems.forEach((item, index) => {
+                if (index === currentPlayingIndex) {
+                    item.classList.add('playing');
+                } else {
+                    item.classList.remove('playing');
+                }
+            });
+        }
+
+        // 滚动到正在播放的文件项
+        function scrollToPlayingFile() {
+            if (currentPlayingIndex < 0) return;
+            
+            const playingElement = document.getElementById(`file-item-${currentPlayingIndex}`);
+            const fileListContainer = document.querySelector('.file-list-container');
+            
+            if (playingElement && fileListContainer) {
+                // 获取悬浮播放器的高度
+                const floatingPlayer = document.getElementById('floatingAudioPlayer');
+                const playerHeight = floatingPlayer ? floatingPlayer.offsetHeight : 120; // 默认120px，因为布局变了
+                
+                // 计算元素在容器中的位置
+                const elementOffsetTop = playingElement.offsetTop;
+                const elementHeight = playingElement.offsetHeight;
+                const containerHeight = fileListContainer.clientHeight;
+                
+                // 计算目标滚动位置，确保元素完全可见且不被底部播放器遮挡
+                // 我们希望元素的底部不超过 (容器高度 - 播放器高度)
+                const desiredBottomPosition = elementOffsetTop + elementHeight;
+                const maxVisibleBottom = fileListContainer.scrollTop + containerHeight - playerHeight;
+                
+                // 如果元素底部超出了可见区域（考虑播放器），则滚动
+                if (desiredBottomPosition > maxVisibleBottom) {
+                    // 计算需要滚动的距离，使元素的底部正好在播放器上方
+                    const targetScrollTop = desiredBottomPosition - (containerHeight - playerHeight);
+                    
+                    // 确保滚动位置不会超出范围
+                    const maxScrollTop = fileListContainer.scrollHeight - containerHeight;
+                    const clampedScrollTop = Math.max(0, Math.min(targetScrollTop, maxScrollTop));
+                    
+                    // 平滑滚动到目标位置
+                    fileListContainer.scrollTo({
+                        top: clampedScrollTop,
+                        behavior: 'smooth'
+                    });
+                } 
+                // 如果元素顶部在可见区域之上，则滚动到元素顶部
+                else if (elementOffsetTop < fileListContainer.scrollTop) {
+                    fileListContainer.scrollTo({
+                        top: elementOffsetTop,
+                        behavior: 'smooth'
+                    });
+                }
             }
         }
 
