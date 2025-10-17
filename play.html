@@ -83,6 +83,7 @@
         .now-playing {
             font-weight: bold;
             flex: 1;
+            font-size: 16px; /* 桌面默认字体大小 */
         }
 
         .player-controls {
@@ -96,7 +97,7 @@
             border: 1px solid #ccc;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 14px; /* 默认字体大小 */
+            font-size: 14px; /* 桌面默认字体大小 */
         }
 
         .control-btn:hover {
@@ -125,6 +126,26 @@
         .ios-audio-player {
             min-height: 80px !important;
             height: 80px !important;
+        }
+
+        /* Android 设备特定样式 */
+        .android-device .now-playing {
+            font-size: 15px !important;
+        }
+
+        .android-device .control-btn {
+            font-size: 14px !important;
+            padding: 10px 12px !important;
+        }
+
+        /* iOS 设备特定样式 */
+        .ios-device .now-playing {
+            font-size: 17px !important;
+        }
+
+        .ios-device .control-btn {
+            font-size: 16px !important;
+            padding: 12px 15px !important;
         }
 
         /* 移动设备通用样式 */
@@ -176,8 +197,6 @@
             
             .control-btn {
                 flex: 1;
-                padding: 12px;
-                font-size: 16px; /* 在移动设备上使用更大的字体 */
                 min-height: 44px; /* 确保触摸目标足够大 */
             }
             
@@ -206,13 +225,14 @@
                 margin-bottom: 15px;
             }
             
+            /* 在非常小的屏幕上，统一使用较小的字体 */
             .now-playing {
-                font-size: 14px;
+                font-size: 14px !important;
             }
             
             .control-btn {
-                padding: 10px;
-                font-size: 14px;
+                font-size: 13px !important;
+                padding: 8px 10px !important;
             }
             
             .audio-container {
@@ -388,6 +408,8 @@
                 const audioContainer = document.querySelector('.audio-container');
                 const audioPlayer = document.getElementById('globalAudioPlayer');
                 const floatingPlayer = document.getElementById('floatingAudioPlayer');
+                const controlBtns = document.querySelectorAll('.control-btn');
+                const nowPlaying = document.querySelector('.now-playing');
                 
                 if (audioContainer && audioPlayer && floatingPlayer) {
                     // 为移动设备设置更大的高度
@@ -397,6 +419,27 @@
                     
                     // 增加悬浮播放器的内边距
                     floatingPlayer.style.padding = '20px 15px';
+                    
+                    // 检测Android设备
+                    const isAndroid = /Android/i.test(navigator.userAgent);
+                    
+                    if (isAndroid) {
+                        // Android设备 - 使用稍小的字体
+                        document.body.classList.add('android-device');
+                        if (nowPlaying) nowPlaying.style.fontSize = '15px';
+                        controlBtns.forEach(btn => {
+                            btn.style.fontSize = '14px';
+                            btn.style.padding = '10px 12px';
+                        });
+                    } else {
+                        // iOS设备 - 使用稍大的字体
+                        document.body.classList.add('ios-device');
+                        if (nowPlaying) nowPlaying.style.fontSize = '17px';
+                        controlBtns.forEach(btn => {
+                            btn.style.fontSize = '16px';
+                            btn.style.padding = '12px 15px';
+                        });
+                    }
                     
                     // 添加移动设备特定样式类
                     audioContainer.classList.add('mobile-audio-container');
